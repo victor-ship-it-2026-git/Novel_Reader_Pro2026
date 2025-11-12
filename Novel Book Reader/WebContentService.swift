@@ -11,8 +11,9 @@ internal import Combine
 enum WebContentError: Error, LocalizedError {
     case invalidURL
     case networkError(Error)
-    case invalidResponse
+    case invalidResponse(statusCode: Int)
     case decodingError
+    case noResponse
 
     var errorDescription: String? {
         switch self {
@@ -20,10 +21,12 @@ enum WebContentError: Error, LocalizedError {
             return "The URL provided is invalid."
         case .networkError(let error):
             return "Network error: \(error.localizedDescription)"
-        case .invalidResponse:
-            return "Invalid response from server."
+        case .invalidResponse(let statusCode):
+            return "Invalid response from server (Status code: \(statusCode)). The website may be blocking automated requests."
         case .decodingError:
             return "Failed to decode response data."
+        case .noResponse:
+            return "No response received from server."
         }
     }
 }
@@ -45,20 +48,34 @@ class WebContentService: ObservableObject {
         errorMessage = nil
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            // Configure URLRequest with proper headers
+            var request = URLRequest(url: url)
+            request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+            request.timeoutInterval = 30
 
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                throw WebContentError.invalidResponse
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                isLoading = false
+                throw WebContentError.noResponse
+            }
+
+            guard (200...299).contains(httpResponse.statusCode) else {
+                isLoading = false
+                throw WebContentError.invalidResponse(statusCode: httpResponse.statusCode)
             }
 
             guard let htmlString = String(data: data, encoding: .utf8) else {
+                isLoading = false
                 throw WebContentError.decodingError
             }
 
             isLoading = false
             return htmlString
 
+        } catch let error as WebContentError {
+            isLoading = false
+            throw error
         } catch {
             isLoading = false
             throw WebContentError.networkError(error)

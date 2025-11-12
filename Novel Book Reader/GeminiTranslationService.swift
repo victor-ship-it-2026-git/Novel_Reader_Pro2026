@@ -135,6 +135,16 @@ class GeminiTranslationService: ObservableObject {
                 throw TranslationError.invalidResponse
             }
 
+            // Check status code
+            guard (200...299).contains(httpResponse.statusCode) else {
+                // Try to decode error response
+                if let errorResponse = try? JSONDecoder().decode(GeminiResponse.self, from: data),
+                   let error = errorResponse.error {
+                    throw TranslationError.apiError("\(error.message) (HTTP \(httpResponse.statusCode))")
+                }
+                throw TranslationError.apiError("HTTP Status Code: \(httpResponse.statusCode)")
+            }
+
             // Decode response
             let geminiResponse = try JSONDecoder().decode(GeminiResponse.self, from: data)
 
@@ -176,6 +186,15 @@ class GeminiTranslationService: ObservableObject {
 
         // Extract and limit text
         let extractedText = TextExtractor.extractAndLimitText(from: htmlContent, maxWords: Config.maxWordCount)
+
+        // Validate extracted text
+        guard !extractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw TranslationError.apiError("No text content could be extracted from the URL. The page may be empty or require JavaScript.")
+        }
+
+        guard extractedText.split(separator: " ").count >= 5 else {
+            throw TranslationError.apiError("Insufficient text extracted from URL (less than 5 words). Try a different URL.")
+        }
 
         // Translate text
         let translatedText = try await translate(text: extractedText)
