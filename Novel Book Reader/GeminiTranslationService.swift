@@ -162,7 +162,45 @@ class GeminiTranslationService: ObservableObject {
         }
     }
 
-    /// Fetches web content and translates it
+    /// Fetches chapter content and translates it (structured extraction)
+    /// - Parameter urlString: The URL to fetch content from
+    /// - Returns: Original chapter content and translated text
+    func fetchChapterAndTranslate(urlString: String) async throws -> (chapter: ChapterContent, translated: String) {
+        let webService = WebContentService()
+
+        // Fetch and parse chapter content
+        let chapter = try await webService.fetchChapterContent(from: urlString)
+
+        // Limit the content to max word count
+        let limitedContent = TextExtractor.limitWords(chapter.content, to: Config.maxWordCount)
+
+        // Validate extracted text
+        guard !limitedContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw TranslationError.apiError("No text content could be extracted from the URL. The page may be empty or require JavaScript.")
+        }
+
+        guard limitedContent.split(separator: " ").count >= 5 else {
+            throw TranslationError.apiError("Insufficient text extracted from URL (less than 5 words). Try a different URL or copy the text directly.")
+        }
+
+        // Translate text
+        let translatedText = try await translate(text: limitedContent)
+
+        // Return chapter with limited content and translation
+        let limitedChapter = ChapterContent(
+            novelTitle: chapter.novelTitle,
+            chapterTitle: chapter.chapterTitle,
+            chapterNumber: chapter.chapterNumber,
+            content: limitedContent,
+            previousChapterURL: chapter.previousChapterURL,
+            nextChapterURL: chapter.nextChapterURL,
+            metadata: chapter.metadata
+        )
+
+        return (chapter: limitedChapter, translated: translatedText)
+    }
+
+    /// Fetches web content and translates it (legacy method)
     /// - Parameter urlString: The URL to fetch content from
     /// - Returns: Translated text
     func fetchAndTranslate(urlString: String) async throws -> (original: String, translated: String) {

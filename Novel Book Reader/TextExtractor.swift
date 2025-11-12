@@ -79,7 +79,7 @@ class TextExtractor {
         )
     }
 
-    private static func decodeHTMLEntities(_ html: String) -> String {
+    internal static func decodeHTMLEntities(_ html: String) -> String {
         var result = html
 
         let entities: [String: String] = [
