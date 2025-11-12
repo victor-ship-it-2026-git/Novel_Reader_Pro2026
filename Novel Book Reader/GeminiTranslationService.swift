@@ -3,9 +3,11 @@
 //  Novel Book Reader
 //
 //  Service for translating text using Google Gemini AI
+//  Now using official GoogleGenerativeAI SDK
 //
 
 import Foundation
+import GoogleGenerativeAI
 internal import Combine
 
 enum TranslationError: Error, LocalizedError {
@@ -13,7 +15,8 @@ enum TranslationError: Error, LocalizedError {
     case networkError(Error)
     case invalidResponse
     case apiError(String)
-    case decodingError
+    case contentBlocked
+    case noResponse
 
     var errorDescription: String? {
         switch self {
@@ -25,45 +28,11 @@ enum TranslationError: Error, LocalizedError {
             return "Invalid response from Gemini API."
         case .apiError(let message):
             return "API error: \(message)"
-        case .decodingError:
-            return "Failed to decode translation response."
+        case .contentBlocked:
+            return "Content was blocked by safety filters. Try different text."
+        case .noResponse:
+            return "No response received from Gemini API."
         }
-    }
-}
-
-// MARK: - Gemini API Models
-
-struct GeminiRequest: Codable {
-    let contents: [Content]
-
-    struct Content: Codable {
-        let parts: [Part]
-
-        struct Part: Codable {
-            let text: String
-        }
-    }
-}
-
-struct GeminiResponse: Codable {
-    let candidates: [Candidate]?
-    let error: ErrorInfo?
-
-    struct Candidate: Codable {
-        let content: Content
-
-        struct Content: Codable {
-            let parts: [Part]
-
-            struct Part: Codable {
-                let text: String
-            }
-        }
-    }
-
-    struct ErrorInfo: Codable {
-        let message: String
-        let code: Int?
     }
 }
 
@@ -71,8 +40,60 @@ struct GeminiResponse: Codable {
 
 @MainActor
 class GeminiTranslationService: ObservableObject {
+   // var objectWillChange: ObservableObjectPublisher
+    
     @Published var isTranslating = false
     @Published var errorMessage: String?
+
+    private lazy var model: GenerativeModel? = {
+
+           // Validate API key
+
+           guard Config.geminiAPIKey != "YOUR_GEMINI_API_KEY_HERE",
+
+                 !Config.geminiAPIKey.isEmpty else {
+
+               return nil
+
+           }
+
+    
+
+           // Initialize the Gemini model
+
+           return GenerativeModel(
+
+               name: Config.geminiModel,
+
+               apiKey: Config.geminiAPIKey,
+
+               generationConfig: GenerationConfig(
+
+                   temperature: 0.3,  // Lower temperature for more consistent translations
+
+                   topP: 0.95,
+
+                   topK: 40,
+
+                   maxOutputTokens: 2048
+
+               ),
+
+               safetySettings: [
+
+                   SafetySetting(harmCategory: .harassment, threshold: .blockMediumAndAbove),
+
+                   SafetySetting(harmCategory: .hateSpeech, threshold: .blockMediumAndAbove),
+
+                   SafetySetting(harmCategory: .sexuallyExplicit, threshold: .blockMediumAndAbove),
+
+                   SafetySetting(harmCategory: .dangerousContent, threshold: .blockMediumAndAbove)
+
+               ]
+
+           )
+
+       }()
 
     /// Translates text from source language to target language using Google Gemini AI
     /// - Parameters:
@@ -85,9 +106,8 @@ class GeminiTranslationService: ObservableObject {
         from sourceLanguage: String = Config.sourceLanguage,
         to targetLanguage: String = Config.targetLanguage
     ) async throws -> String {
-        // Validate API key
-        guard Config.geminiAPIKey != "YOUR_GEMINI_API_KEY_HERE",
-              !Config.geminiAPIKey.isEmpty else {
+        // Validate model is initialized
+        guard let model = model else {
             throw TranslationError.invalidAPIKey
         }
 
@@ -103,72 +123,46 @@ class GeminiTranslationService: ObservableObject {
         \(text)
         """
 
-        // Create request body
-        let requestBody = GeminiRequest(
-            contents: [
-                GeminiRequest.Content(
-                    parts: [
-                        GeminiRequest.Content.Part(text: prompt)
-                    ]
-                )
-            ]
-        )
-
-        // Prepare URL request
-        guard let url = URL(string: Config.geminiAPIEndpoint) else {
-            throw TranslationError.invalidResponse
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
         do {
-            // Encode request body
-            request.httpBody = try JSONEncoder().encode(requestBody)
+            // Generate content using the SDK
+            let response = try await model.generateContent(prompt)
 
-            // Make the API call
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            // Check HTTP response
-            guard response is HTTPURLResponse else {
-                throw TranslationError.invalidResponse
-            }
-
-            // Check status code
-            guard (200...299).contains(httpResponse.statusCode) else {
-                // Try to decode error response
-                if let errorResponse = try? JSONDecoder().decode(GeminiResponse.self, from: data),
-                   let error = errorResponse.error {
-                    throw TranslationError.apiError("\(error.message) (HTTP \(httpResponse.statusCode))")
-                }
-                throw TranslationError.apiError("HTTP Status Code: \(httpResponse.statusCode)")
-            }
-
-            // Decode response
-            let geminiResponse = try JSONDecoder().decode(GeminiResponse.self, from: data)
-
-            // Check for API errors
-            if let error = geminiResponse.error {
+            // Extract the translated text
+            guard let translatedText = response.text else {
                 isTranslating = false
-                throw TranslationError.apiError(error.message)
-            }
-
-            // Extract translated text
-            guard let candidate = geminiResponse.candidates?.first,
-                  let translatedText = candidate.content.parts.first?.text else {
-                throw TranslationError.invalidResponse
+                throw TranslationError.noResponse
             }
 
             isTranslating = false
             return translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        } catch let error as TranslationError {
+        } catch let error as GenerateContentError {
             isTranslating = false
-            throw error
-        } catch _ as DecodingError {
-            isTranslating = false
-            throw TranslationError.decodingError
+
+            // Handle specific SDK errors
+            switch error {
+            case .internalError(let underlying):
+                throw TranslationError.networkError(underlying)
+            case .promptBlocked(_):
+                throw TranslationError.contentBlocked
+            case .responseStoppedEarly(_):
+                throw TranslationError.apiError("Response stopped early. Try shorter text.")
+            case .invalidAPIKey:
+                throw TranslationError.invalidAPIKey
+            case .invalidAPIKey(let message):
+
+                            throw TranslationError.apiError("Invalid API Key: \(message)")
+
+                        case .unsupportedUserLocation:
+
+                            throw TranslationError.apiError("Gemini API is not available in your location. Try using a VPN.")
+
+                        case .promptImageContentError:
+
+                            throw TranslationError.apiError("Image content error (should not occur for text translation)")
+@unknown default:
+                throw TranslationError.apiError(error.localizedDescription)
+            }
         } catch {
             isTranslating = false
             throw TranslationError.networkError(error)

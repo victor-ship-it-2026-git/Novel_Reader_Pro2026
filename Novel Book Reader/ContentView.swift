@@ -12,13 +12,21 @@ struct ContentView: View {
 
     @StateObject private var translationService = GeminiTranslationService()
     @State private var urlText = ""
+    @State private var directText = ""
     @State private var originalText = ""
     @State private var translatedText = ""
     @State private var showAlert = false
     @State private var alertMessage = ""
+    @State private var inputMode: InputMode = .url
+    @State private var showDebugView = false
 
     // Sample URL for testing
     private let sampleURL = "https://en.wikipedia.org/wiki/Swift_(programming_language)"
+
+    enum InputMode {
+        case url
+        case directText
+    }
 
     // MARK: - Body
 
@@ -26,25 +34,64 @@ struct ContentView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
+                    // MARK: - Input Mode Picker
+                    Picker("Input Mode", selection: $inputMode) {
+                        Text("From URL").tag(InputMode.url)
+                        Text("Direct Text").tag(InputMode.directText)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.bottom, 8)
+
                     // MARK: - URL Input Section
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Web URL")
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
+                    if inputMode == .url {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Web URL")
+                                .font(.headline)
+                                .foregroundStyle(.secondary)
 
-                        HStack {
-                            TextField("Enter URL", text: $urlText)
-                                .textFieldStyle(.roundedBorder)
-                                .keyboardType(.URL)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
+                            HStack {
+                                TextField("Enter URL", text: $urlText)
+                                    .textFieldStyle(.roundedBorder)
+                                    .keyboardType(.URL)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
 
-                            Button {
-                                urlText = sampleURL
-                            } label: {
-                                Image(systemName: "doc.on.clipboard")
-                                    .foregroundStyle(.blue)
+                                Button {
+                                    urlText = sampleURL
+                                } label: {
+                                    Image(systemName: "doc.on.clipboard")
+                                        .foregroundStyle(.blue)
+                                }
                             }
+                        }
+                    }
+
+                    // MARK: - Direct Text Input Section
+                    if inputMode == .directText {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Paste Text Here")
+                                    .font(.headline)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Text("\(wordCount(directText)) words")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            TextEditor(text: $directText)
+                                .frame(minHeight: 150)
+                                .padding(8)
+                                .background(Color(.systemGray6))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                )
+
+                            Text("For sites like novelbin.com that use JavaScript, copy the chapter text and paste it here.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
 
@@ -61,16 +108,16 @@ struct ContentView: View {
                                 Text("Translating...")
                             } else {
                                 Image(systemName: "arrow.left.arrow.right")
-                                Text("Fetch & Translate")
+                                Text(inputMode == .url ? "Fetch & Translate" : "Translate")
                             }
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(urlText.isEmpty ? Color.gray : Color.blue)
+                        .background(isInputEmpty ? Color.gray : Color.blue)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
-                    .disabled(urlText.isEmpty || translationService.isTranslating)
+                    .disabled(isInputEmpty || translationService.isTranslating)
 
                     // MARK: - Original Text Section
                     if !originalText.isEmpty {
@@ -141,6 +188,31 @@ struct ContentView: View {
                 .padding()
             }
             .navigationTitle("Novel Reader & Translator")
+            .toolbar {
+
+                            ToolbarItem(placement: .navigationBarTrailing) {
+
+                                Button {
+
+                                    showDebugView = true
+
+                                } label: {
+
+                                    Image(systemName: "ant.circle")
+
+                                    Text("Debug")
+
+                                }
+
+                            }
+
+                        }
+
+                        .sheet(isPresented: $showDebugView) {
+
+                            DebugView()
+
+                        }
             .alert("Error", isPresented: $showAlert) {
                 Button("OK", role: .cancel) { }
             } message: {
@@ -149,15 +221,36 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - Computed Properties
+
+    private var isInputEmpty: Bool {
+        switch inputMode {
+        case .url:
+            return urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .directText:
+            return directText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
     // MARK: - Functions
 
     private func performTranslation() async {
-        guard !urlText.isEmpty else { return }
-
         do {
-            let result = try await translationService.fetchAndTranslate(urlString: urlText)
-            originalText = result.original
-            translatedText = result.translated
+            switch inputMode {
+            case .url:
+                guard !urlText.isEmpty else { return }
+                let result = try await translationService.fetchAndTranslate(urlString: urlText)
+                originalText = result.original
+                translatedText = result.translated
+
+            case .directText:
+                guard !directText.isEmpty else { return }
+                // Limit the text to configured word count
+                let limitedText = TextExtractor.limitWords(directText, to: Config.maxWordCount)
+                originalText = limitedText
+                let translated = try await translationService.translate(text: limitedText)
+                translatedText = translated
+            }
         } catch {
             alertMessage = error.localizedDescription
             showAlert = true

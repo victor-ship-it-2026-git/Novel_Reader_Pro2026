@@ -112,6 +112,22 @@ For iOS 18+, consider adding a Privacy Manifest:
 
 ## Troubleshooting Network Issues
 
+### 🔧 Step 0: Always Use the Debug Tool First!
+
+Before troubleshooting any network issue, **run the built-in debug tool**:
+
+1. Tap the wrench icon (🔧) in the app
+2. Tap "Test API Connection"
+3. Review the debug log for specific error messages
+
+The debug tool will immediately show:
+- Whether your API key is valid
+- Which models are available
+- Exact HTTP status codes (404, 403, 401, etc.)
+- Detailed API error messages
+
+This will save you hours of troubleshooting! Use the debug tool results to identify which issue below applies to you.
+
 ### Issue 1: "Invalid Response from Server"
 
 **Possible Causes:**
@@ -122,21 +138,26 @@ For iOS 18+, consider adding a Privacy Manifest:
 
 **Solutions:**
 
-1. **Check Network Permissions**
+1. **Use the Debug Tool** (🔧)
+   - Run the debug tool first to identify the specific issue
+   - Check if any models are listed (API working) or if you get errors
+
+2. **Check Network Permissions**
    - Verify App Transport Security settings (see above)
    - Ensure "Outgoing Connections (Client)" capability is enabled
 
-2. **Verify API Key**
+3. **Verify API Key**
+   - The debug tool will verify your API key
    - Open `Config.swift`
    - Ensure `geminiAPIKey` is set to your actual API key
    - Verify the key starts with "AIzaSy"
 
-3. **Test Different URLs**
+4. **Test Different URLs**
    - Try the sample Wikipedia URL first
    - Some websites block automated access
    - Try: `https://en.wikipedia.org/wiki/Apple`
 
-4. **Check Internet Connection**
+5. **Check Internet Connection**
    - Ensure your Mac/simulator has internet access
    - Try accessing a website in Safari
 
@@ -179,14 +200,29 @@ For iOS 18+, consider adding a Privacy Manifest:
    Press ⌘ + R to run
    ```
 
-3. ✅ **Test with Sample URL**
+3. ✅ **Use the Debug Tool First** 🔧
    ```
+   Tap the wrench icon (🔧) in the top-right corner
+   Tap "Test API Connection"
+   Verify that models are listed successfully
+   Check debug log for any errors
+   ```
+
+   **Why use the debug tool?**
+   - Verifies your API key is working
+   - Lists available Gemini models
+   - Shows specific error codes (404, 403, 401)
+   - Helps diagnose network issues immediately
+
+4. ✅ **Test with Sample URL**
+   ```
+   Go back to main screen
    Click the clipboard icon to load sample URL
    Click "Fetch & Translate"
    Wait for the translation to appear
    ```
 
-4. ✅ **Verify Results**
+5. ✅ **Verify Results**
    ```
    Check that Original Text appears
    Check that Translated Text (Burmese) appears
@@ -195,7 +231,29 @@ For iOS 18+, consider adding a Privacy Manifest:
 
 ### Debugging Network Requests
 
-If you're still experiencing issues, add debug logging:
+#### Method 1: Use the Built-in Debug Tool (Recommended) 🔧
+
+The app includes a comprehensive debug tool that makes troubleshooting much easier:
+
+1. **Access the Debug Tool**
+   - Tap the wrench icon (🔧) in the top-right corner
+   - Tap "Test API Connection"
+
+2. **Review Debug Results**
+   - Available Models: Shows which Gemini models work
+   - Debug Log: Shows detailed API responses and error codes
+   - Copy button: Copy the log for sharing or further analysis
+
+3. **Interpret Results**
+   - ✅ Green checkmarks: Tests passed
+   - ❌ Red X marks: Issues that need fixing
+   - HTTP 404: Model not found or API not enabled
+   - HTTP 403: API key restrictions
+   - HTTP 401: Invalid API key
+
+#### Method 2: Use Xcode Console (Advanced)
+
+If you need additional debugging:
 
 1. **Open the Console in Xcode**
    - Run the app
@@ -205,6 +263,7 @@ If you're still experiencing issues, add debug logging:
    - Network errors will appear in the console
    - Look for URLSession errors
    - Check HTTP status codes
+   - Debug tool also prints to console
 
 ---
 

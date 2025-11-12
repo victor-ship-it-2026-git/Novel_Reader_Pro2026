@@ -144,20 +144,65 @@ For production apps, it's highly recommended to restrict your API key:
 2. Click the "Run" button (▶️) or press ⌘ + R
 3. Wait for the app to build and launch
 
-### Step 2: Test Translation
+### Step 2: Use the Debug Tool (Recommended) 🔧
 
-1. In the app, you'll see a text field for entering a URL
-2. Click the clipboard icon to use the sample URL, or enter your own
-3. Click the "Fetch & Translate" button
-4. Wait for the translation to complete
+**Before trying to translate, use the built-in debug tool to verify your API setup:**
 
-### Step 3: Verify Results
+1. **Open the Debug Tool**
+   - Tap the wrench icon (🔧) in the top-right corner of the app
+   - This will open the API Debug Tool
+
+2. **Verify Your API Key**
+   - The tool will display the first 10 characters of your configured API key
+   - Make sure it matches your actual API key
+
+3. **Test API Connection**
+   - Tap the "Test API Connection" button
+   - The tool will perform comprehensive diagnostics
+
+4. **Review Debug Results**
+   - **Available Models Section**: Lists all Gemini models accessible with your API key
+     - If this section appears, your API is working correctly! ✅
+     - Note which models are listed (e.g., gemini-1.5-flash, gemini-1.5-pro)
+
+   - **Debug Log Section**: Shows detailed test results
+     - Green checkmarks (✅) mean the test passed
+     - Red X marks (❌) indicate issues that need fixing
+
+5. **Update Config (if needed)**
+   - If the available models list shows different model names than what's in `Config.swift`, update your config:
+   ```swift
+   static let geminiModel = "model-name-from-debug-tool"
+   ```
+
+6. **Copy Debug Log (for troubleshooting)**
+   - Tap "Copy" button to copy the debug log
+   - Useful for sharing when seeking help
+
+**What the Debug Tool Tests:**
+- ✓ Lists all available Gemini models via API
+- ✓ Tests common model names (gemini-pro, gemini-1.5-pro, gemini-1.5-flash, etc.)
+- ✓ Shows HTTP status codes and API responses
+- ✓ Identifies specific API errors (404, 403, 401)
+- ✓ Verifies API key validity and permissions
+
+### Step 3: Test Translation
+
+Once the debug tool confirms your API is working:
+
+1. Go back to the main screen (swipe down or tap outside the debug view)
+2. In the app, you'll see a text field for entering a URL
+3. Click the clipboard icon to use the sample URL, or enter your own
+4. Click the "Fetch & Translate" button
+5. Wait for the translation to complete
+
+### Step 4: Verify Results
 
 If successful, you should see:
 - **Original Text (English)**: The extracted text from the URL
 - **Translated Text (Burmese)**: The Burmese translation
 
-If you encounter errors, see the [Troubleshooting](#troubleshooting) section below.
+If you encounter errors, the debug tool will help identify the specific issue. See the [Troubleshooting](#troubleshooting) section below.
 
 ---
 
@@ -168,13 +213,15 @@ If you encounter errors, see the [Troubleshooting](#troubleshooting) section bel
 Google Gemini API offers a generous free tier:
 
 - **Rate Limits**:
-  - 60 requests per minute (RPM)
+  - 15 requests per minute (RPM) for free tier
   - 1,500 requests per day (RPD)
   - 1 million tokens per minute (TPM)
 
-- **Model**: `gemini-pro`
+- **Model**: `gemini-1.5-flash` (default)
+  - Fast and efficient for text translation
   - Optimized for text generation and understanding
   - Supports multiple languages including Burmese
+  - Alternative: `gemini-1.5-pro` (more capable but slower)
 
 ### Checking Your Usage
 
@@ -193,24 +240,63 @@ Google Gemini API offers a generous free tier:
 
 ## Troubleshooting
 
+### 🔧 Always Start with the Debug Tool!
+
+Before troubleshooting any issue, **run the debug tool first**:
+1. Tap the wrench icon (🔧) in the app
+2. Tap "Test API Connection"
+3. Review the debug log to identify the exact issue
+
+The debug tool will show you:
+- Which models are available for your API key
+- Specific error codes (404, 403, 401)
+- API response details
+- Whether your API key is valid
+
+### Error: "models/gemini-pro is not found" or "404 Not Found"
+
+**Problem**: The model name in your config doesn't exist or isn't available.
+
+**Solutions**:
+1. **Use the Debug Tool** (🔧) to see which models are available
+   - The "Available Models" section will list all models you can use
+   - Copy one of the working model names
+
+2. **Update your Config.swift** with a working model name:
+   ```swift
+   static let geminiModel = "gemini-1.5-flash-latest"  // or another model from debug tool
+   ```
+
+3. **If no models are listed** in the debug tool:
+   - Your Generative Language API may not be enabled
+   - Go to [Google Cloud Console](https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com)
+   - Select your project and click "Enable"
+
+4. Clean and rebuild your project (⌘ + Shift + K, then ⌘ + B)
+
 ### Error: "Invalid API key"
 
 **Problem**: The API key is not valid or not configured correctly.
 
 **Solutions**:
-1. Double-check that you copied the entire API key
-2. Ensure there are no extra spaces or characters
-3. Verify the API key is active in Google Cloud Console
-4. Make sure you're using a Gemini API key, not another Google API key
+1. **Use the Debug Tool** (🔧) - it will verify if your API key works
+   - Look for error code 401 in the debug log (invalid API key)
+   - Look for error code 403 (API key restrictions)
+
+2. Double-check that you copied the entire API key
+3. Ensure there are no extra spaces or characters
+4. Verify the API key is active in Google Cloud Console
+5. Make sure you're using a Gemini API key, not another Google API key
 
 ### Error: "API key not valid. Please pass a valid API key."
 
 **Problem**: The API key format is incorrect or the key is disabled.
 
 **Solutions**:
-1. Regenerate your API key in Google AI Studio
-2. Check if your API key has been restricted and needs additional configuration
-3. Ensure "Generative Language API" is enabled in your Google Cloud project
+1. **Check the Debug Tool** (🔧) - it will show the exact error message
+2. Regenerate your API key in Google AI Studio
+3. Check if your API key has been restricted and needs additional configuration
+4. Ensure "Generative Language API" is enabled in your Google Cloud project
 
 ### Error: "Network error" or "Connection failed"
 
