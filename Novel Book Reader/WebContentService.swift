@@ -6,6 +6,7 @@
 //
 
 import Foundation
+internal import Combine
 
 enum WebContentError: Error, LocalizedError {
     case invalidURL

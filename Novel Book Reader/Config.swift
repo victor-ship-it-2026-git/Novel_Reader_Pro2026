@@ -12,12 +12,12 @@ struct Config {
 
     /// Your Google Gemini API Key
     /// Get your API key from: https://makersuite.google.com/app/apikey
-    static let geminiAPIKey = "YOUR_GEMINI_API_KEY_HERE"
+    static let geminiAPIKey = "AIzaSyA65ErT5sEZFyAqwaZcJb8ngNwzWMks6Y0"
 
     // MARK: - Translation Settings
 
     /// Maximum word count for content to translate
-    static let maxWordCount = 400
+    static let maxWordCount = 200
 
     /// Source language for translation
     static let sourceLanguage = "English"

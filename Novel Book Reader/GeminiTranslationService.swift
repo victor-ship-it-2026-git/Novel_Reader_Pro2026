@@ -6,6 +6,7 @@
 //
 
 import Foundation
+internal import Combine
 
 enum TranslationError: Error, LocalizedError {
     case invalidAPIKey
@@ -130,7 +131,7 @@ class GeminiTranslationService: ObservableObject {
             let (data, response) = try await URLSession.shared.data(for: request)
 
             // Check HTTP response
-            guard let httpResponse = response as? HTTPURLResponse else {
+            guard response is HTTPURLResponse else {
                 throw TranslationError.invalidResponse
             }
 
@@ -155,7 +156,7 @@ class GeminiTranslationService: ObservableObject {
         } catch let error as TranslationError {
             isTranslating = false
             throw error
-        } catch let error as DecodingError {
+        } catch _ as DecodingError {
             isTranslating = false
             throw TranslationError.decodingError
         } catch {
