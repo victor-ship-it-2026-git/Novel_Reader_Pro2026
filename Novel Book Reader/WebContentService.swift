@@ -49,7 +49,22 @@ class WebContentService: ObservableObject {
     /// - Returns: Structured chapter content
     func fetchChapterContent(from urlString: String) async throws -> ChapterContent {
         let html = try await fetchContent(from: urlString)
-        return htmlParser.parseChapter(from: html)
+
+        // Debug: Print first 500 characters of HTML
+        #if DEBUG
+        print("📄 HTML Preview (first 500 chars):")
+        print(String(html.prefix(500)))
+        #endif
+
+        let chapter = htmlParser.parseChapter(from: html)
+
+        // Debug: Print extracted content preview
+        #if DEBUG
+        print("📖 Extracted Content Preview:")
+        print(String(chapter.content.prefix(200)))
+        #endif
+
+        return chapter
     }
 
     /// Fetches HTML content from a given URL

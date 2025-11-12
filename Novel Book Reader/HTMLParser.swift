@@ -202,7 +202,15 @@ class HTMLParser {
     }
 
     private func extractContent(from html: String) -> String {
-        // Try each content selector
+        // First, try a simpler direct extraction for common patterns
+        if let content = extractContentByID(html, id: "chr-content") {
+            let cleaned = cleanText(content)
+            if cleaned.count > 100 {
+                return cleaned
+            }
+        }
+
+        // Try each content selector using the complex method
         for selector in rules.contentSelectors {
             if let content = extractTextFromSelector(html, selector: selector) {
                 let cleaned = cleanText(content)
@@ -215,6 +223,34 @@ class HTMLParser {
 
         // Fallback: Extract all text from body
         return extractAllText(from: html)
+    }
+
+    /// Simple extraction by ID - extracts content within a tag with specific ID
+    private func extractContentByID(_ html: String, id: String) -> String? {
+        // Simple approach: Find the id attribute and extract a large chunk
+        // Then rely on cleanText to remove all HTML tags
+        let patterns = [
+            "id\\s*=\\s*\"\(id)\"",
+            "id\\s*=\\s*'\(id)'"
+        ]
+
+        for pattern in patterns {
+            if let range = html.range(of: pattern, options: [.regularExpression, .caseInsensitive]) {
+                // Find the > after the id to get the start of content
+                let afterID = html[range.upperBound...]
+                if let contentStart = afterID.firstIndex(of: ">") {
+                    let contentStartIndex = html.index(after: contentStart)
+                    // Take a large chunk (next 50000 characters or to end)
+                    let endIndex = html.index(contentStartIndex, offsetBy: min(50000, html.distance(from: contentStartIndex, to: html.endIndex)))
+                    let chunk = String(html[contentStartIndex..<endIndex])
+
+                    // Return the chunk - cleanText will handle removing tags
+                    return chunk
+                }
+            }
+        }
+
+        return nil
     }
 
     private func extractNextChapterURL(from html: String) -> String? {
@@ -338,12 +374,12 @@ class HTMLParser {
         var result = html
 
         for tag in tags {
+            // Handle multi-line tags with dotAll option
             let pattern = "<\(tag)[^>]*>.*?</\(tag)>"
-            result = result.replacingOccurrences(
-                of: pattern,
-                with: "",
-                options: [.regularExpression, .caseInsensitive]
-            )
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) {
+                let nsString = result as NSString
+                result = regex.stringByReplacingMatches(in: result, range: NSRange(location: 0, length: nsString.length), withTemplate: "")
+            }
         }
 
         return result
@@ -352,66 +388,66 @@ class HTMLParser {
     private func cleanText(_ text: String) -> String {
         var cleaned = text
 
-        // Decode HTML entities
-        cleaned = TextExtractor.decodeHTMLEntities(cleaned)
-
-        // Remove HTML tags
-        cleaned = cleaned.replacingOccurrences(
-            of: "<[^>]+>",
-            with: " ",
-            options: .regularExpression
-        )
-
-        // Clean whitespace
-        cleaned = cleaned.replacingOccurrences(
-            of: "\\s+",
-            with: " ",
-            options: .regularExpression
-        )
-
-        return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
-
-// MARK: - Make decodeHTMLEntities accessible
-extension TextExtractor {
-    static func decodeHTMLEntities(_ html: String) -> String {
-        var result = html
-
-        let entities: [String: String] = [
-            "&nbsp;": " ",
-            "&lt;": "<",
-            "&gt;": ">",
-            "&amp;": "&",
-            "&quot;": "\"",
-            "&apos;": "'",
-            "&#39;": "'",
-            "&ndash;": "–",
-            "&mdash;": "—",
-            "&hellip;": "…"
-        ]
-
-        for (entity, replacement) in entities {
-            result = result.replacingOccurrences(of: entity, with: replacement)
+        // First, remove problematic tags with their content (ads, scripts, etc.)
+        let tagsToStrip = ["script", "style", "noscript", "iframe", "ins", "aside", "nav", "header", "footer", "form"]
+        for tag in tagsToStrip {
+            if let regex = try? NSRegularExpression(pattern: "<\(tag)[^>]*>.*?</\(tag)>", options: [.caseInsensitive, .dotMatchesLineSeparators]) {
+                let nsString = cleaned as NSString
+                cleaned = regex.stringByReplacingMatches(in: cleaned, range: NSRange(location: 0, length: nsString.length), withTemplate: "")
+            }
         }
 
-        // Handle numeric entities
-        let numericPattern = "&#(\\d+);"
-        if let regex = try? NSRegularExpression(pattern: numericPattern, options: []) {
-            let nsString = result as NSString
-            let matches = regex.matches(in: result, range: NSRange(location: 0, length: nsString.length))
+        // Remove HTML comments
+        if let regex = try? NSRegularExpression(pattern: "<!--.*?-->", options: [.dotMatchesLineSeparators]) {
+            let nsString = cleaned as NSString
+            cleaned = regex.stringByReplacingMatches(in: cleaned, range: NSRange(location: 0, length: nsString.length), withTemplate: "")
+        }
 
-            for match in matches.reversed() {
-                if match.numberOfRanges > 1,
-                   let range = Range(match.range(at: 1), in: result),
-                   let code = Int(result[range]),
-                   let scalar = UnicodeScalar(code) {
-                    let fullRange = Range(match.range, in: result)!
-                    result.replaceSubrange(fullRange, with: String(Character(scalar)))
+        // Replace paragraph tags with newlines for better formatting
+        // This preserves the paragraph structure
+        let paragraphTags = ["</p>", "</P>", "<p>", "<P>", "<br>", "<BR>", "<br/>", "<BR/>", "<br />", "<BR />"]
+        for tag in paragraphTags {
+            cleaned = cleaned.replacingOccurrences(of: tag, with: "\n\n", options: .caseInsensitive)
+        }
+
+        // Also handle <p ...> tags with attributes
+        if let regex = try? NSRegularExpression(pattern: "<p[^>]*>", options: .caseInsensitive) {
+            let nsString = cleaned as NSString
+            cleaned = regex.stringByReplacingMatches(in: cleaned, range: NSRange(location: 0, length: nsString.length), withTemplate: "\n\n")
+        }
+
+        // Remove all remaining HTML tags - apply multiple passes to catch edge cases
+        for _ in 0..<3 {  // Apply 3 times to handle nested or malformed tags
+            if let regex = try? NSRegularExpression(pattern: "<[^>]*>", options: [.dotMatchesLineSeparators]) {
+                let nsString = cleaned as NSString
+                let before = cleaned
+                cleaned = regex.stringByReplacingMatches(in: cleaned, range: NSRange(location: 0, length: nsString.length), withTemplate: " ")
+                // If nothing changed, we're done
+                if before == cleaned {
+                    break
                 }
             }
         }
 
-        return result
+        // Decode HTML entities
+        cleaned = TextExtractor.decodeHTMLEntities(cleaned)
+
+        // Remove any remaining < or > characters that might be left
+        cleaned = cleaned.replacingOccurrences(of: "<", with: "")
+        cleaned = cleaned.replacingOccurrences(of: ">", with: "")
+
+        // Clean up multiple spaces and tabs (but preserve newlines for paragraphs)
+        cleaned = cleaned.replacingOccurrences(of: "[ \\t]+", with: " ", options: .regularExpression)
+
+        // Reduce multiple consecutive newlines to maximum of 2 (one blank line between paragraphs)
+        cleaned = cleaned.replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: .regularExpression)
+
+        // Trim leading and trailing whitespace from each line
+        let lines = cleaned.components(separatedBy: "\n")
+        let trimmedLines = lines.map { $0.trimmingCharacters(in: .whitespaces) }
+        cleaned = trimmedLines.joined(separator: "\n")
+
+        // Trim leading and trailing whitespace from the entire text
+        return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

@@ -32,3 +32,19 @@ struct Config {
     /// Target language for translation
     static let targetLanguage = "Burmese"
 }
+
+/*
+ gemini-2.0-flash
+ gemini-2.0-flash-exp
+ gemini-2.0-flash-lite
+ gemini-2.0-flash-live
+ gemini-2.0-flash-preview-image-generation
+ gemini-2.5-flash
+ gemini-2.5-flash-lite
+ gemini-2.5-flash-live
+ gemini-2.5-flash-native-audio-dialog
+ gemini-2.5-flash-tts
+ gemini-2.5-pro
+ gemini-robotics-er-1.5-preview
+ learnlm-2.0-flash-experimental
+ */

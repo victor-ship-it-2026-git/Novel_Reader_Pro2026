@@ -75,19 +75,20 @@ class GeminiTranslationService: ObservableObject {
 
                    topK: 40,
 
-                   maxOutputTokens: 2048
+                   maxOutputTokens: 4096  // Increased for longer translations
 
                ),
 
                safetySettings: [
 
-                   SafetySetting(harmCategory: .harassment, threshold: .blockMediumAndAbove),
+                   // Using blockOnlyHigh to reduce false positives for novel content
+                   SafetySetting(harmCategory: .harassment, threshold: .blockOnlyHigh),
 
-                   SafetySetting(harmCategory: .hateSpeech, threshold: .blockMediumAndAbove),
+                   SafetySetting(harmCategory: .hateSpeech, threshold: .blockOnlyHigh),
 
-                   SafetySetting(harmCategory: .sexuallyExplicit, threshold: .blockMediumAndAbove),
+                   SafetySetting(harmCategory: .sexuallyExplicit, threshold: .blockOnlyHigh),
 
-                   SafetySetting(harmCategory: .dangerousContent, threshold: .blockMediumAndAbove)
+                   SafetySetting(harmCategory: .dangerousContent, threshold: .blockOnlyHigh)
 
                ]
 
@@ -114,18 +115,36 @@ class GeminiTranslationService: ObservableObject {
         isTranslating = true
         errorMessage = nil
 
-        // Prepare the prompt
+        // Sanitize the input text to avoid API issues
+        let sanitizedText = sanitizeTextForTranslation(text)
+
+        // Debug logging
+        #if DEBUG
+        print("🔤 Translation Request:")
+        print("  - Text length: \(sanitizedText.count) characters")
+        print("  - Word count: \(sanitizedText.split(separator: " ").count) words")
+        print("  - First 100 chars: \(String(sanitizedText.prefix(100)))")
+        #endif
+
+        // Prepare the prompt with clearer instructions
         let prompt = """
         Translate the following text from \(sourceLanguage) to \(targetLanguage).
-        Provide only the translation without any explanations or additional text.
+        Important:
+        - Provide ONLY the translated text
+        - Do NOT include any explanations, notes, or additional commentary
+        - Preserve the paragraph structure and line breaks
 
         Text to translate:
-        \(text)
+        \(sanitizedText)
         """
 
         do {
             // Generate content using the SDK
             let response = try await model.generateContent(prompt)
+
+            #if DEBUG
+            print("✅ Translation successful")
+            #endif
 
             // Extract the translated text
             guard let translatedText = response.text else {
@@ -139,13 +158,30 @@ class GeminiTranslationService: ObservableObject {
         } catch let error as GenerateContentError {
             isTranslating = false
 
+            #if DEBUG
+            print("❌ GenerateContentError: \(error)")
+            #endif
+
             // Handle specific SDK errors - FIXED
             switch error {
             case .internalError(let underlying):
+                #if DEBUG
+                print("  Internal error: \(underlying)")
+                #endif
+                // Check if it's a decoding error (malformed content)
+                if let decodingError = underlying as? DecodingError {
+                    throw TranslationError.apiError("Content may be blocked by safety filters or API returned malformed response. Try with shorter text or different content.")
+                }
                 throw TranslationError.networkError(underlying)
-            case .promptBlocked(_):
+            case .promptBlocked(let response):
+                #if DEBUG
+                print("  Prompt blocked: \(response)")
+                #endif
                 throw TranslationError.contentBlocked
-            case .responseStoppedEarly(let reason, _):  // FIX: Proper tuple handling
+            case .responseStoppedEarly(let reason, let response):  // FIX: Proper tuple handling
+                #if DEBUG
+                print("  Response stopped early: \(reason), response: \(response)")
+                #endif
                 throw TranslationError.apiError("Response stopped early: \(reason). Try shorter text.")
             case .invalidAPIKey(let message):  // FIX: Only one invalidAPIKey case
                 throw TranslationError.apiError("Invalid API Key: \(message)")
@@ -154,12 +190,41 @@ class GeminiTranslationService: ObservableObject {
             case .promptImageContentError:
                 throw TranslationError.apiError("Image content error (should not occur for text translation)")
             @unknown default:
+                #if DEBUG
+                print("  Unknown error: \(error)")
+                #endif
                 throw TranslationError.apiError(error.localizedDescription)
             }
+        } catch let error as DecodingError {
+            // Catch decoding errors specifically
+            isTranslating = false
+            #if DEBUG
+            print("❌ DecodingError: \(error)")
+            #endif
+            throw TranslationError.apiError("API response format error. The content may be blocked by safety filters or the text is too long. Try shorter text.")
         } catch {
             isTranslating = false
+            #if DEBUG
+            print("❌ Unknown error: \(error)")
+            #endif
             throw TranslationError.networkError(error)
         }
+    }
+
+    /// Sanitizes text before sending to translation API
+    /// - Parameter text: The text to sanitize
+    /// - Returns: Sanitized text safe for API transmission
+    private func sanitizeTextForTranslation(_ text: String) -> String {
+        var sanitized = text
+
+        // Ensure consistent line breaks (use \n only)
+        sanitized = sanitized.replacingOccurrences(of: "\r\n", with: "\n")
+        sanitized = sanitized.replacingOccurrences(of: "\r", with: "\n")
+
+        // Remove any potentially problematic characters
+        sanitized = sanitized.trimmingCharacters(in: .controlCharacters)
+
+        return sanitized
     }
 
     /// Fetches chapter content and translates it (structured extraction)

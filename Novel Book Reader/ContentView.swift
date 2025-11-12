@@ -10,18 +10,21 @@ import SwiftUI
 struct ContentView: View {
     // MARK: - State Properties
 
+    @StateObject private var webContentService = WebContentService()
     @StateObject private var translationService = GeminiTranslationService()
     @State private var urlText = ""
     @State private var directText = ""
-    @State private var originalText = ""
-    @State private var translatedText = ""
+    @State private var extractedContent = ""
+    @State private var translatedContent = ""
+    @State private var chapterInfo = ""
     @State private var showAlert = false
     @State private var alertMessage = ""
     @State private var inputMode: InputMode = .url
     @State private var showDebugView = false
+    @State private var isLoading = false
 
     // Sample URL for testing
-    private let sampleURL = "https://en.wikipedia.org/wiki/Swift_(programming_language)"
+    private let sampleURL = "https://novelbin.com/b/i-just-want-to-destroy-the-sect-but-how-did-i-become-a-god-against-all-odds/chapter-269-how-can-the-demonic-sect-be-so-unreasonable"
 
     enum InputMode {
         case url
@@ -89,26 +92,26 @@ struct ContentView: View {
                                         .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                                 )
 
-                            Text("For sites like novelbin.com that use JavaScript, copy the chapter text and paste it here.")
+                            Text("For JavaScript-heavy sites, copy the chapter text and paste it here for extraction.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
 
-                    // MARK: - Translate Button
+                    // MARK: - Extract Button
                     Button {
                         Task {
-                            await performTranslation()
+                            await performExtraction()
                         }
                     } label: {
                         HStack {
-                            if translationService.isTranslating {
+                            if isLoading {
                                 ProgressView()
                                     .tint(.white)
-                                Text("Translating...")
+                                Text("Extracting...")
                             } else {
-                                Image(systemName: "arrow.left.arrow.right")
-                                Text(inputMode == .url ? "Fetch & Translate" : "Translate")
+                                Image(systemName: "doc.text.magnifyingglass")
+                                Text("Extract Content")
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -117,22 +120,38 @@ struct ContentView: View {
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
-                    .disabled(isInputEmpty || translationService.isTranslating)
+                    .disabled(isInputEmpty || isLoading)
 
-                    // MARK: - Original Text Section
-                    if !originalText.isEmpty {
+                    // MARK: - Chapter Info Section
+                    if !chapterInfo.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Chapter Information")
+                                .font(.headline)
+
+                            Text(chapterInfo)
+                                .font(.subheadline)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                    }
+
+                    // MARK: - Extracted Content Section
+                    if !extractedContent.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text("Original Text (English)")
+                                Text("Extracted Content (English)")
                                     .font(.headline)
                                 Spacer()
-                                Text("\(wordCount(originalText)) words")
+                                Text("\(wordCount(extractedContent)) words")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
 
                             ScrollView {
-                                Text(originalText)
+                                Text(extractedContent)
                                     .font(.body)
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -140,18 +159,42 @@ struct ContentView: View {
                                     .background(Color(.systemGray6))
                                     .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
-                            .frame(maxHeight: 200)
+                            .frame(maxHeight: 300)
                         }
+
+                        // MARK: - Translate Button
+                        Button {
+                            Task {
+                                await performTranslation()
+                            }
+                        } label: {
+                            HStack {
+                                if translationService.isTranslating {
+                                    ProgressView()
+                                        .tint(.white)
+                                    Text("Translating...")
+                                } else {
+                                    Image(systemName: "arrow.left.arrow.right")
+                                    Text("Translate to \(Config.targetLanguage)")
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(translationService.isTranslating ? Color.gray : Color.green)
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .disabled(translationService.isTranslating)
                     }
 
-                    // MARK: - Translated Text Section
-                    if !translatedText.isEmpty {
+                    // MARK: - Translated Content Section
+                    if !translatedContent.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Translated Text (Burmese)")
+                            Text("Translated Content (\(Config.targetLanguage))")
                                 .font(.headline)
 
                             ScrollView {
-                                Text(translatedText)
+                                Text(translatedContent)
                                     .font(.body)
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -159,12 +202,12 @@ struct ContentView: View {
                                     .background(Color(.systemGray6))
                                     .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
-                            .frame(maxHeight: 200)
+                            .frame(maxHeight: 300)
                         }
                     }
 
                     // MARK: - Info Section
-                    if originalText.isEmpty && translatedText.isEmpty {
+                    if extractedContent.isEmpty {
                         VStack(spacing: 16) {
                             Image(systemName: "doc.text.magnifyingglass")
                                 .font(.system(size: 60))
@@ -174,7 +217,7 @@ struct ContentView: View {
                                 .font(.title3)
                                 .fontWeight(.semibold)
 
-                            Text("This app will fetch content from the URL, extract text (up to \(Config.maxWordCount) words), and translate it from English to Burmese using Google Gemini AI.")
+                            Text("This app will fetch content from novel websites like novelbin.com, extract the chapter content using advanced HTML parsing, and translate it to \(Config.targetLanguage) using Google Gemini AI.")
                                 .font(.body)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
@@ -234,23 +277,77 @@ struct ContentView: View {
 
     // MARK: - Functions
 
-    private func performTranslation() async {
+    private func performExtraction() async {
+        isLoading = true
+        chapterInfo = ""
+        extractedContent = ""
+        translatedContent = ""  // Clear translation when extracting new content
+
         do {
             switch inputMode {
             case .url:
-                guard !urlText.isEmpty else { return }
-                let result = try await translationService.fetchAndTranslate(urlString: urlText)
-                originalText = result.original
-                translatedText = result.translated
+                guard !urlText.isEmpty else {
+                    isLoading = false
+                    return
+                }
+
+                // Fetch and parse chapter content
+                let chapter = try await webContentService.fetchChapterContent(from: urlText)
+
+                // Build chapter info
+                var info = ""
+                if let novelTitle = chapter.novelTitle {
+                    info += "📚 Novel: \(novelTitle)\n"
+                }
+                info += "📖 Chapter: \(chapter.chapterTitle)\n"
+                if let chapterNumber = chapter.chapterNumber {
+                    info += "🔢 Number: \(chapterNumber)\n"
+                }
+                if let prevURL = chapter.previousChapterURL {
+                    info += "⬅️ Previous: \(prevURL)\n"
+                }
+                if let nextURL = chapter.nextChapterURL {
+                    info += "➡️ Next: \(nextURL)"
+                }
+
+                chapterInfo = info.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // Limit content to max word count
+                let limitedContent = TextExtractor.limitWords(chapter.content, to: Config.maxWordCount)
+                extractedContent = limitedContent
 
             case .directText:
-                guard !directText.isEmpty else { return }
-                // Limit the text to configured word count
+                guard !directText.isEmpty else {
+                    isLoading = false
+                    return
+                }
+                // For direct text, just limit and display
                 let limitedText = TextExtractor.limitWords(directText, to: Config.maxWordCount)
-                originalText = limitedText
-                let translated = try await translationService.translate(text: limitedText)
-                translatedText = translated
+                extractedContent = limitedText
+                chapterInfo = "📝 Direct Text Input"
             }
+
+            isLoading = false
+
+        } catch {
+            isLoading = false
+            alertMessage = error.localizedDescription
+            showAlert = true
+        }
+    }
+
+    private func performTranslation() async {
+        guard !extractedContent.isEmpty else { return }
+
+        do {
+            // Translate the extracted content
+            let translated = try await translationService.translate(
+                text: extractedContent,
+                from: Config.sourceLanguage,
+                to: Config.targetLanguage
+            )
+            translatedContent = translated
+
         } catch {
             alertMessage = error.localizedDescription
             showAlert = true
