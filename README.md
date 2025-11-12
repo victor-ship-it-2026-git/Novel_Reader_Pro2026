@@ -126,21 +126,58 @@ static let targetLanguage = "Burmese"
 
 ## Troubleshooting
 
-### Common Issues
+### ⚠️ Network Error: "Invalid Response from Server"
+
+This is the most common issue. It usually means network permissions are not configured. **Follow these steps**:
+
+1. **Configure Network Permissions in Xcode**
+   - Open your project in Xcode
+   - Select the target → Info tab
+   - Add "App Transport Security Settings" dictionary
+   - Add "Allow Arbitrary Loads" = YES
+
+   **📖 See detailed instructions**: [XCODE_CONFIGURATION_GUIDE.md](XCODE_CONFIGURATION_GUIDE.md)
+
+2. **Verify Your API Key**
+   - Open `Config.swift`
+   - Replace `"YOUR_GEMINI_API_KEY_HERE"` with your actual API key
+   - Get your key from: https://makersuite.google.com/app/apikey
+
+3. **Test with Sample URL**
+   - Use the clipboard icon to load the Wikipedia sample URL
+   - Click "Fetch & Translate"
+
+### Other Common Issues
 
 1. **"Invalid API key" error**
    - Double-check your API key in `Config.swift`
    - Ensure there are no extra spaces or characters
+   - Verify the key starts with "AIzaSy"
 
-2. **"Network error"**
-   - Check your internet connection
-   - Verify the URL is accessible
+2. **"Network error: The resource could not be loaded"**
+   - This means App Transport Security is blocking requests
+   - Follow the configuration guide: [XCODE_CONFIGURATION_GUIDE.md](XCODE_CONFIGURATION_GUIDE.md)
 
-3. **Empty translation**
-   - Try a different URL
-   - Some websites may block automated content fetching
+3. **HTTP Status Code 403 or 401**
+   - 403: Website is blocking automated requests or API key restricted
+   - 401: API key is missing or invalid
+   - Try a different URL (e.g., Wikipedia pages work well)
 
-For more detailed troubleshooting, see [GOOGLE_GEMINI_SETUP_GUIDE.md](GOOGLE_GEMINI_SETUP_GUIDE.md).
+4. **"No text content could be extracted"**
+   - The webpage may require JavaScript to load content
+   - Try a simpler webpage with static HTML content
+   - Wikipedia and blog pages usually work well
+
+5. **Empty or strange translation**
+   - Verify the extracted text makes sense (check Original Text section)
+   - Some websites have anti-scraping protection
+   - Try different URLs
+
+### Getting More Help
+
+- **Network & Xcode Setup**: [XCODE_CONFIGURATION_GUIDE.md](XCODE_CONFIGURATION_GUIDE.md)
+- **API Setup**: [GOOGLE_GEMINI_SETUP_GUIDE.md](GOOGLE_GEMINI_SETUP_GUIDE.md)
+- **Check Console Logs**: Open Xcode Console (⌘ + Shift + C) for detailed error messages
 
 ## Future Enhancements
 
