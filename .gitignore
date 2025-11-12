@@ -99,3 +99,6 @@ iOSInjectionProject/
 **/xcshareddata/WorkspaceSettings.xcsettings
 
 # End of https://www.toptal.com/developers/gitignore/api/swift,xcode
+
+# Custom - API Keys and Sensitive Configuration
+Novel Book Reader/Config.swift
