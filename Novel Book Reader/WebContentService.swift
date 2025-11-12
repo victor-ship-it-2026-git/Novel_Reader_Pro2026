@@ -36,6 +36,22 @@ class WebContentService: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
+    private let htmlParser: HTMLParser
+
+    /// Initialize with a specific HTML parser
+    /// - Parameter parser: The HTMLParser to use (defaults to novelbin rules)
+    init(parser: HTMLParser = HTMLParser(rules: .novelbin)) {
+        self.htmlParser = parser
+    }
+
+    /// Fetches and parses chapter content from a URL
+    /// - Parameter urlString: The URL string to fetch content from
+    /// - Returns: Structured chapter content
+    func fetchChapterContent(from urlString: String) async throws -> ChapterContent {
+        let html = try await fetchContent(from: urlString)
+        return htmlParser.parseChapter(from: html)
+    }
+
     /// Fetches HTML content from a given URL
     /// - Parameter urlString: The URL string to fetch content from
     /// - Returns: The HTML content as a string
