@@ -103,8 +103,8 @@ class GeminiTranslationService: ObservableObject {
     /// - Returns: Translated text
     func translate(
         text: String,
-        from sourceLanguage: String = Config.sourceLanguage,
-        to targetLanguage: String = Config.targetLanguage
+        from sourceLanguage: String = "English",  // Direct default values
+        to targetLanguage: String = "Burmese"     // Direct default values
     ) async throws -> String {
         // Validate model is initialized
         guard let model = model else {
@@ -139,28 +139,21 @@ class GeminiTranslationService: ObservableObject {
         } catch let error as GenerateContentError {
             isTranslating = false
 
-            // Handle specific SDK errors
+            // Handle specific SDK errors - FIXED
             switch error {
             case .internalError(let underlying):
                 throw TranslationError.networkError(underlying)
             case .promptBlocked(_):
                 throw TranslationError.contentBlocked
-            case .responseStoppedEarly(_):
-                throw TranslationError.apiError("Response stopped early. Try shorter text.")
-            case .invalidAPIKey:
-                throw TranslationError.invalidAPIKey
-            case .invalidAPIKey(let message):
-
-                            throw TranslationError.apiError("Invalid API Key: \(message)")
-
-                        case .unsupportedUserLocation:
-
-                            throw TranslationError.apiError("Gemini API is not available in your location. Try using a VPN.")
-
-                        case .promptImageContentError:
-
-                            throw TranslationError.apiError("Image content error (should not occur for text translation)")
-@unknown default:
+            case .responseStoppedEarly(let reason, _):  // FIX: Proper tuple handling
+                throw TranslationError.apiError("Response stopped early: \(reason). Try shorter text.")
+            case .invalidAPIKey(let message):  // FIX: Only one invalidAPIKey case
+                throw TranslationError.apiError("Invalid API Key: \(message)")
+            case .unsupportedUserLocation:
+                throw TranslationError.apiError("Gemini API is not available in your location. Try using a VPN.")
+            case .promptImageContentError:
+                throw TranslationError.apiError("Image content error (should not occur for text translation)")
+            @unknown default:
                 throw TranslationError.apiError(error.localizedDescription)
             }
         } catch {
