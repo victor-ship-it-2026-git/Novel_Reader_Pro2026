@@ -3,7 +3,7 @@
 //  Novel Book Reader
 //
 //  Service for translating text using Google Gemini AI
-//  Now using official GoogleGenerativeAI SDK
+//  Now using official GoogleGenerativeAI SDK with exponential backoff retry
 //
 
 import Foundation
@@ -17,6 +17,7 @@ enum TranslationError: Error, LocalizedError {
     case apiError(String)
     case contentBlocked
     case noResponse
+    case maxRetriesExceeded
 
     var errorDescription: String? {
         switch self {
@@ -32,6 +33,8 @@ enum TranslationError: Error, LocalizedError {
             return "Content was blocked by safety filters. Try different text."
         case .noResponse:
             return "No response received from Gemini API."
+        case .maxRetriesExceeded:
+            return "Maximum retry attempts exceeded. The service may be temporarily unavailable."
         }
     }
 }
@@ -41,9 +44,11 @@ enum TranslationError: Error, LocalizedError {
 @MainActor
 class GeminiTranslationService: ObservableObject {
    // var objectWillChange: ObservableObjectPublisher
-    
+
     @Published var isTranslating = false
     @Published var errorMessage: String?
+    @Published var retryAttempt: Int = 0
+    @Published var retryMessage: String?
 
     private lazy var model: GenerativeModel? = {
 
@@ -57,7 +62,7 @@ class GeminiTranslationService: ObservableObject {
 
            }
 
-    
+
 
            // Initialize the Gemini model
 
@@ -96,7 +101,7 @@ class GeminiTranslationService: ObservableObject {
 
        }()
 
-    /// Translates text from source language to target language using Google Gemini AI
+    /// Translates text from source language to target language using Google Gemini AI with automatic retry
     /// - Parameters:
     ///   - text: The text to translate
     ///   - sourceLanguage: Source language (default: English)
@@ -114,6 +119,8 @@ class GeminiTranslationService: ObservableObject {
 
         isTranslating = true
         errorMessage = nil
+        retryAttempt = 0
+        retryMessage = nil
 
         // Sanitize the input text to avoid API issues
         let sanitizedText = sanitizeTextForTranslation(text)
@@ -138,76 +145,209 @@ class GeminiTranslationService: ObservableObject {
         \(sanitizedText)
         """
 
-        do {
-            // Generate content using the SDK
-            let response = try await model.generateContent(prompt)
+        // Try with exponential backoff
+        var lastError: Error?
+        var delay = Config.initialRetryDelay
 
-            #if DEBUG
-            print("✅ Translation successful")
-            #endif
+        for attempt in 0...Config.maxRetryAttempts {
+            do {
+                if attempt > 0 {
+                    retryAttempt = attempt
+                    retryMessage = "Retrying... (Attempt \(attempt)/\(Config.maxRetryAttempts))"
 
-            // Extract the translated text
-            guard let translatedText = response.text else {
-                isTranslating = false
-                throw TranslationError.noResponse
-            }
+                    #if DEBUG
+                    print("🔄 Retry attempt \(attempt)/\(Config.maxRetryAttempts) after \(delay)s delay")
+                    #endif
 
-            isTranslating = false
-            return translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        } catch let error as GenerateContentError {
-            isTranslating = false
-
-            #if DEBUG
-            print("❌ GenerateContentError: \(error)")
-            #endif
-
-            // Handle specific SDK errors - FIXED
-            switch error {
-            case .internalError(let underlying):
-                #if DEBUG
-                print("  Internal error: \(underlying)")
-                #endif
-                // Check if it's a decoding error (malformed content)
-                if let decodingError = underlying as? DecodingError {
-                    throw TranslationError.apiError("Content may be blocked by safety filters or API returned malformed response. Try with shorter text or different content.")
+                    // Wait before retrying with exponential backoff
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 }
-                throw TranslationError.networkError(underlying)
-            case .promptBlocked(let response):
+
+                // Generate content using the SDK
+                let response = try await model.generateContent(prompt)
+
                 #if DEBUG
-                print("  Prompt blocked: \(response)")
+                print("✅ Translation successful\(attempt > 0 ? " (after \(attempt) retries)" : "")")
                 #endif
-                throw TranslationError.contentBlocked
-            case .responseStoppedEarly(let reason, let response):  // FIX: Proper tuple handling
+
+                // Extract the translated text
+                guard let translatedText = response.text else {
+                    throw TranslationError.noResponse
+                }
+
+                // Success - reset retry state
+                isTranslating = false
+                retryAttempt = 0
+                retryMessage = nil
+
+                return translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            } catch let error as GenerateContentError {
+                lastError = error
+
                 #if DEBUG
-                print("  Response stopped early: \(reason), response: \(response)")
+                print("❌ GenerateContentError: \(error)")
                 #endif
-                throw TranslationError.apiError("Response stopped early: \(reason). Try shorter text.")
-            case .invalidAPIKey(let message):  // FIX: Only one invalidAPIKey case
-                throw TranslationError.apiError("Invalid API Key: \(message)")
-            case .unsupportedUserLocation:
-                throw TranslationError.apiError("Gemini API is not available in your location. Try using a VPN.")
-            case .promptImageContentError:
-                throw TranslationError.apiError("Image content error (should not occur for text translation)")
-            @unknown default:
+
+                // Check if this error is retryable
+                let isRetryable = isRetryableError(error)
+
+                // Handle specific SDK errors
+                switch error {
+                case .internalError(let underlying):
+                    #if DEBUG
+                    print("  Internal error: \(underlying)")
+                    #endif
+
+                    // Check for 503 error or network issues
+                    if isRetryable && attempt < Config.maxRetryAttempts {
+                        #if DEBUG
+                        print("  → Retryable error detected")
+                        #endif
+                        delay *= 2  // Exponential backoff
+                        continue
+                    }
+
+                    // Check if it's a decoding error (malformed content)
+                    if let decodingError = underlying as? DecodingError {
+                        isTranslating = false
+                        retryAttempt = 0
+                        retryMessage = nil
+                        throw TranslationError.apiError("Content may be blocked by safety filters or API returned malformed response. Try with shorter text or different content.")
+                    }
+
+                    isTranslating = false
+                    retryAttempt = 0
+                    retryMessage = nil
+                    throw TranslationError.networkError(underlying)
+
+                case .promptBlocked(let response):
+                    #if DEBUG
+                    print("  Prompt blocked: \(response)")
+                    #endif
+                    isTranslating = false
+                    retryAttempt = 0
+                    retryMessage = nil
+                    throw TranslationError.contentBlocked
+
+                case .responseStoppedEarly(let reason, let response):  // FIX: Proper tuple handling
+                    #if DEBUG
+                    print("  Response stopped early: \(reason), response: \(response)")
+                    #endif
+                    isTranslating = false
+                    retryAttempt = 0
+                    retryMessage = nil
+                    throw TranslationError.apiError("Response stopped early: \(reason). Try shorter text.")
+
+                case .invalidAPIKey(let message):  // FIX: Only one invalidAPIKey case
+                    isTranslating = false
+                    retryAttempt = 0
+                    retryMessage = nil
+                    throw TranslationError.apiError("Invalid API Key: \(message)")
+
+                case .unsupportedUserLocation:
+                    isTranslating = false
+                    retryAttempt = 0
+                    retryMessage = nil
+                    throw TranslationError.apiError("Gemini API is not available in your location. Try using a VPN.")
+
+                case .promptImageContentError:
+                    isTranslating = false
+                    retryAttempt = 0
+                    retryMessage = nil
+                    throw TranslationError.apiError("Image content error (should not occur for text translation)")
+
+                @unknown default:
+                    #if DEBUG
+                    print("  Unknown error: \(error)")
+                    #endif
+
+                    // Retry unknown errors if under max attempts
+                    if isRetryable && attempt < Config.maxRetryAttempts {
+                        delay *= 2
+                        continue
+                    }
+
+                    isTranslating = false
+                    retryAttempt = 0
+                    retryMessage = nil
+                    throw TranslationError.apiError(error.localizedDescription)
+                }
+            } catch let error as DecodingError {
+                // Catch decoding errors specifically - don't retry these
+                isTranslating = false
+                retryAttempt = 0
+                retryMessage = nil
+
                 #if DEBUG
-                print("  Unknown error: \(error)")
+                print("❌ DecodingError: \(error)")
                 #endif
-                throw TranslationError.apiError(error.localizedDescription)
+                throw TranslationError.apiError("API response format error. The content may be blocked by safety filters or the text is too long. Try shorter text.")
+            } catch {
+                lastError = error
+
+                #if DEBUG
+                print("❌ Unknown error: \(error)")
+                #endif
+
+                // Retry network errors
+                if attempt < Config.maxRetryAttempts {
+                    delay *= 2
+                    continue
+                }
             }
-        } catch let error as DecodingError {
-            // Catch decoding errors specifically
-            isTranslating = false
-            #if DEBUG
-            print("❌ DecodingError: \(error)")
-            #endif
-            throw TranslationError.apiError("API response format error. The content may be blocked by safety filters or the text is too long. Try shorter text.")
-        } catch {
-            isTranslating = false
-            #if DEBUG
-            print("❌ Unknown error: \(error)")
-            #endif
-            throw TranslationError.networkError(error)
+        }
+
+        // Max retries exceeded
+        isTranslating = false
+        retryAttempt = 0
+        retryMessage = nil
+
+        #if DEBUG
+        print("❌ Max retries exceeded")
+        #endif
+
+        if let lastError = lastError {
+            throw TranslationError.networkError(lastError)
+        } else {
+            throw TranslationError.maxRetriesExceeded
+        }
+    }
+
+    /// Determines if an error should be retried
+    /// - Parameter error: The error to check
+    /// - Returns: True if the error is transient and should be retried
+    private func isRetryableError(_ error: GenerateContentError) -> Bool {
+        switch error {
+        case .internalError(let underlying):
+            // Check for specific HTTP status codes that indicate temporary issues
+            let errorString = String(describing: underlying)
+
+            // 503 - Service Unavailable / Overloaded
+            if errorString.contains("503") || errorString.contains("overloaded") {
+                return true
+            }
+
+            // 429 - Too Many Requests / Rate Limited
+            if errorString.contains("429") || errorString.contains("rate limit") {
+                return true
+            }
+
+            // 500 - Internal Server Error
+            if errorString.contains("500") {
+                return true
+            }
+
+            // Generic network errors
+            if errorString.contains("timeout") || errorString.contains("connection") {
+                return true
+            }
+
+            return false
+
+        default:
+            // Don't retry content blocked, invalid API key, etc.
+            return false
         }
     }
 
