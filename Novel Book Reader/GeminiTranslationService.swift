@@ -145,6 +145,11 @@ class GeminiTranslationService: ObservableObject {
         \(sanitizedText)
         """
 
+        #if DEBUG
+        print("  - Total prompt length: \(prompt.count) characters")
+        print("  - Estimated tokens: ~\(prompt.count / 4)")
+        #endif
+
         // Try with exponential backoff
         var lastError: Error?
         var delay = Config.initialRetryDelay
@@ -162,6 +167,10 @@ class GeminiTranslationService: ObservableObject {
                     // Wait before retrying with exponential backoff
                     try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 }
+
+                #if DEBUG
+                print("  - Sending request to model: \(Config.geminiModel)")
+                #endif
 
                 // Generate content using the SDK
                 let response = try await model.generateContent(prompt)
@@ -187,25 +196,48 @@ class GeminiTranslationService: ObservableObject {
 
                 #if DEBUG
                 print("❌ GenerateContentError: \(error)")
+                print("  Full error description: \(error.localizedDescription)")
                 #endif
 
                 // Check if this error is retryable
                 let isRetryable = isRetryableError(error)
 
+                #if DEBUG
+                print("  Is retryable: \(isRetryable)")
+                print("  Current attempt: \(attempt)/\(Config.maxRetryAttempts)")
+                #endif
+
                 // Handle specific SDK errors
                 switch error {
                 case .internalError(let underlying):
                     #if DEBUG
+                    print("  Internal error type: \(type(of: underlying))")
                     print("  Internal error: \(underlying)")
+                    print("  Internal error description: \(underlying.localizedDescription)")
+
+                    // Check for RPCError specifically
+                    if let rpcError = underlying as? RPCError {
+                        print("  RPC Error Code: \(rpcError.httpResponseCode)")
+                        print("  RPC Error Message: \(rpcError.message)")
+                        print("  RPC Error Status: \(rpcError.status)")
+                    }
                     #endif
 
                     // Check for 503 error or network issues
                     if isRetryable && attempt < Config.maxRetryAttempts {
                         #if DEBUG
-                        print("  → Retryable error detected")
+                        print("  → Retryable error detected, will retry")
                         #endif
                         delay *= 2  // Exponential backoff
                         continue
+                    } else if attempt >= Config.maxRetryAttempts {
+                        #if DEBUG
+                        print("  → Max retries reached, giving up")
+                        #endif
+                    } else {
+                        #if DEBUG
+                        print("  → Non-retryable error")
+                        #endif
                     }
 
                     // Check if it's a decoding error (malformed content)

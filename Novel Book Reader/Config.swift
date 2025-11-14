@@ -24,6 +24,7 @@ struct Config {
     // MARK: - Translation Settings
 
     /// Maximum word count for content to translate
+    /// NOTE: If you're getting 503 errors, try reducing this to 500 or 1000 for testing
     static let maxWordCount = 5000
 
     /// Source language for translation
