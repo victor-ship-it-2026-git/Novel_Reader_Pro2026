@@ -447,6 +447,11 @@ class HTMLParser {
         let trimmedLines = lines.map { $0.trimmingCharacters(in: .whitespaces) }
         cleaned = trimmedLines.joined(separator: "\n")
 
+        // Stop extraction at "Remove Ads From" and exclude it
+        if let removeAdsRange = cleaned.range(of: "Remove Ads From", options: .caseInsensitive) {
+            cleaned = String(cleaned[..<removeAdsRange.lowerBound])
+        }
+
         // Trim leading and trailing whitespace from the entire text
         return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
     }
