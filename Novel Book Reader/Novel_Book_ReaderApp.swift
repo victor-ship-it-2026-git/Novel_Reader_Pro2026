@@ -6,12 +6,18 @@
 //
 
 import SwiftUI
+import FirebaseCore
 
 @main
 struct Novel_Book_ReaderApp: App {
+    init() {
+        // Initialize Firebase
+        FirebaseApp.configure()
+    }
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainTabView()
         }
     }
 }
