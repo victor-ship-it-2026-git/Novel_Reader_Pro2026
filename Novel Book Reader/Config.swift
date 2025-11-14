@@ -31,6 +31,14 @@ struct Config {
 
     /// Target language for translation
     static let targetLanguage = "Burmese"
+
+    // MARK: - Retry Configuration
+
+    /// Maximum number of retry attempts for API calls
+    static let maxRetryAttempts = 4
+
+    /// Initial delay in seconds before first retry (will be doubled with each retry)
+    static let initialRetryDelay: TimeInterval = 2.0
 }
 
 /*

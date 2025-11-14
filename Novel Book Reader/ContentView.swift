@@ -172,7 +172,13 @@ struct ContentView: View {
                                 if translationService.isTranslating {
                                     ProgressView()
                                         .tint(.white)
-                                    Text("Translating...")
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Translating...")
+                                        if let retryMessage = translationService.retryMessage {
+                                            Text(retryMessage)
+                                                .font(.caption)
+                                        }
+                                    }
                                 } else {
                                     Image(systemName: "arrow.left.arrow.right")
                                     Text("Translate to \(Config.targetLanguage)")
