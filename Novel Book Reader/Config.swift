@@ -15,17 +15,23 @@ struct Config {
     static let geminiAPIKey = "AIzaSyA65ErT5sEZFyAqwaZcJb8ngNwzWMks6Y0"
 
     /// Gemini model to use for translation
-    /// Options: "gemini-1.5-flash-latest" (faster, cheaper) or "gemini-1.5-pro-latest" (more capable)
-
-      /// Note: Using official GoogleGenerativeAI SDK
-      /// Switched to gemini-2.0-flash for better availability (gemini-2.5-flash was experiencing 503 errors)
+    ///
+    /// RECOMMENDED: "gemini-2.0-flash"
+    /// - Fast, reliable, optimized for translation tasks
+    /// - No "thinking" token overhead
+    ///
+    /// NOT RECOMMENDED for translation:
+    /// - "gemini-2.5-pro": Uses 4000+ thinking tokens, often hits MAX_TOKENS before producing output
+    /// - "gemini-2.5-flash": Frequently overloaded (503 errors)
+    ///
+    /// Note: Using official GoogleGenerativeAI SDK
 
       static let geminiModel = "gemini-2.0-flash"
 
     // MARK: - Translation Settings
 
     /// Maximum word count for content to translate
-    /// NOTE: If you're getting 503 errors, try reducing this to 500 or 1000 for testing
+    /// With gemini-2.0-flash, 5000 words works reliably
     static let maxWordCount = 5000
 
     /// Source language for translation
