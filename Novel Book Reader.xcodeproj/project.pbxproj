@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7D216AE82EC7875300834BEB /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 7D216AE72EC7875300834BEB /* FirebaseAnalytics */; };
+		7D216AEA2EC7875300834BEB /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 7D216AE92EC7875300834BEB /* FirebaseDatabase */; };
 		7D6126192EC4DF3800F1FD48 /* GoogleGenerativeAI in Frameworks */ = {isa = PBXBuildFile; productRef = 7D6126182EC4DF3800F1FD48 /* GoogleGenerativeAI */; };
 /* End PBXBuildFile section */
 
@@ -27,6 +29,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7D216AEA2EC7875300834BEB /* FirebaseDatabase in Frameworks */,
+				7D216AE82EC7875300834BEB /* FirebaseAnalytics in Frameworks */,
 				7D6126192EC4DF3800F1FD48 /* GoogleGenerativeAI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -71,6 +75,8 @@
 			name = "Novel Book Reader";
 			packageProductDependencies = (
 				7D6126182EC4DF3800F1FD48 /* GoogleGenerativeAI */,
+				7D216AE72EC7875300834BEB /* FirebaseAnalytics */,
+				7D216AE92EC7875300834BEB /* FirebaseDatabase */,
 			);
 			productName = "Novel Book Reader";
 			productReference = 7D6125F92EC4CD0000F1FD48 /* Novel Book Reader.app */;
@@ -102,6 +108,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				7D6126172EC4DF3800F1FD48 /* XCRemoteSwiftPackageReference "generative-ai-swift" */,
+				7D216AE62EC7875300834BEB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 7D6125FA2EC4CD0000F1FD48 /* Products */;
@@ -345,6 +352,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		7D216AE62EC7875300834BEB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.6.0;
+			};
+		};
 		7D6126172EC4DF3800F1FD48 /* XCRemoteSwiftPackageReference "generative-ai-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/google/generative-ai-swift";
@@ -356,6 +371,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		7D216AE72EC7875300834BEB /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D216AE62EC7875300834BEB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		7D216AE92EC7875300834BEB /* FirebaseDatabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D216AE62EC7875300834BEB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseDatabase;
+		};
 		7D6126182EC4DF3800F1FD48 /* GoogleGenerativeAI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 7D6126172EC4DF3800F1FD48 /* XCRemoteSwiftPackageReference "generative-ai-swift" */;

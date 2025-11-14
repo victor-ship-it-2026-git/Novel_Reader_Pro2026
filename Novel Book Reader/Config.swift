@@ -24,7 +24,7 @@ struct Config {
     // MARK: - Translation Settings
 
     /// Maximum word count for content to translate
-    static let maxWordCount = 400
+    static let maxWordCount = 5000
 
     /// Source language for translation
     static let sourceLanguage = "English"
