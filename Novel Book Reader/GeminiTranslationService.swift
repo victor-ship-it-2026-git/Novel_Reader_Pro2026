@@ -215,11 +215,11 @@ class GeminiTranslationService: ObservableObject {
                     print("  Internal error: \(underlying)")
                     print("  Internal error description: \(underlying.localizedDescription)")
 
-                    // Check for RPCError specifically
-                    if let rpcError = underlying as? RPCError {
-                        print("  RPC Error Code: \(rpcError.httpResponseCode)")
-                        print("  RPC Error Message: \(rpcError.message)")
-                        print("  RPC Error Status: \(rpcError.status)")
+                    // Parse error details from string representation
+                    let errorString = String(describing: underlying)
+                    if errorString.contains("httpResponseCode:") {
+                        print("  Error string contains HTTP response code")
+                        print("  Full error string: \(errorString)")
                     }
                     #endif
 
