@@ -18,8 +18,9 @@ struct Config {
     /// Options: "gemini-1.5-flash-latest" (faster, cheaper) or "gemini-1.5-pro-latest" (more capable)
 
       /// Note: Using official GoogleGenerativeAI SDK
+      /// Switched to gemini-2.0-flash for better availability (gemini-2.5-flash was experiencing 503 errors)
 
-      static let geminiModel = "gemini-2.5-flash"
+      static let geminiModel = "gemini-2.0-flash"
 
     // MARK: - Translation Settings
 
